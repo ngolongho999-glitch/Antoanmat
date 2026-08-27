@@ -132,7 +132,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       if (faces.isNotEmpty) {
         final face = faces.first;
         double faceWidthInPixels = face.boundingBox.width;
-        // Tính toán khoảng cách chính xác
         double estimatedDistance = (image.width * 18.0) / faceWidthInPixels;
 
         if (mounted) {
@@ -147,7 +146,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           _hideOverlay();
         }
       } else {
-        // Nếu đưa sát camera quá làm khuôn mặt bị tràn viền không quét được
         if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
           _showOverlay();
         }
@@ -164,7 +162,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     if (_isOverlayShowing) return;
     _isOverlayShowing = true;
 
-    // Hiển thị khung màn hình che phủ màu xanh giống Samsung Safety Screen
     await SystemAlertWindow.showSystemWindow(
       height: 2500,
       width: 1500,
