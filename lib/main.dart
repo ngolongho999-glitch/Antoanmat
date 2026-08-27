@@ -7,14 +7,14 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 List<CameraDescription> _cameras = [];
 
-// ĐÂY LÀ MÀN HÌNH CHE CẢNH BÁO BẬT LÊN KHI KHOẢNG CÁCH < 30CM
+// MÀN HÌNH CHE CẢNH BÁO MÀU ĐỎ KHI KHOẢNG CÁCH < 30CM
 @pragma("vm:entry-point")
 void overlayMain() {
   runApp(
     const MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Material(
-        color: Colors.red, // Màn hình màu đỏ che toàn bộ
+        color: Colors.red,
         child: Center(
           child: Padding(
             padding: EdgeInsets.all(24.0),
@@ -84,7 +84,6 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
       await Permission.camera.request();
       await Permission.notification.request();
 
-      // Kiểm tra quyền Overlay
       bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
       if (!isGranted) {
         await FlutterOverlayWindow.requestPermission();
@@ -157,7 +156,6 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
           });
         }
 
-        // LOGIC BẬT TẮT MÀN HÌNH CHE
         if (distance <= 30.0) {
           _showOverlay();
         } else {
@@ -180,7 +178,7 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
         flag: OverlayFlag.defaultFlag,
         alignment: OverlayAlignment.center,
         visibility: NotificationVisibility.visibilitySecret,
-        positionGravity: PositionGravity.full,
+        positionGravity: PositionGravity.none,
       );
     }
   }
