@@ -1,5 +1,4 @@
-import 'dart:math';
-import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -8,24 +7,6 @@ import 'package:system_alert_window/system_alert_window.dart';
 
 List<CameraDescription> _cameras = [];
 
-// Entry point bắt buộc cho overlay chạy ngầm
-@pragma("vm:entry-point")
-void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: Material(
-      color: Colors.transparent,
-      child: Center(
-        child: Text(
-          "CẢNH BÁO: KHOẢNG CÁCH QUÁ GẦN (< 30CM)!",
-          style: TextStyle(color: Colors.red, fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-      ),
-    ),
-  ));
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -33,71 +14,58 @@ Future<void> main() async {
   } catch (e) {
     debugPrint("Lỗi camera: $e");
   }
-  runApp(const MyApp());
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: DistanceGuardApp(),
+  ));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class DistanceGuardApp extends StatefulWidget {
+  const DistanceGuardApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: DistanceScreenGuard(),
-    );
-  }
+  State<DistanceGuardApp> createState() => _DistanceGuardAppState();
 }
 
-class DistanceScreenGuard extends StatefulWidget {
-  const DistanceScreenGuard({super.key});
-
-  @override
-  State<DistanceScreenGuard> createState() => _DistanceScreenGuardState();
-}
-
-class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
+class _DistanceGuardAppState extends State<DistanceGuardApp> {
   CameraController? _cameraController;
   FaceDetector? _faceDetector;
   bool _isProcessing = false;
   bool _isOverlayShowing = false;
   bool _isServiceRunning = false;
   double _calculatedDistanceCm = 0.0;
-  String _statusText = "Sẵn sàng khởi chạy";
 
-  @override
-  void initState() {
-    super.initState();
-    _checkPermissions();
+  // Bắt buộc cấp quyền Vẽ đè (Overlay) trước khi chạy
+  Future<bool> _requestRequiredPermissions() async {
+    await Permission.camera.request();
+    
+    bool? isOverlayGranted = await SystemAlertWindow.checkPermissions();
+    if (isOverlayGranted != true) {
+      // Mở cài đặt hệ thống để người dùng bật thủ công
+      await SystemAlertWindow.requestPermissions();
+      return false;
+    }
+    return true;
   }
 
-  Future<void> _checkPermissions() async {
-    await Permission.camera.request();
-    bool? isGranted = await SystemAlertWindow.checkPermissions();
-    if (isGranted != true) {
-      await SystemAlertWindow.requestPermissions();
+  Future<void> _toggleService() async {
+    if (_isServiceRunning) {
+      _stopGuardService();
+    } else {
+      bool granted = await _requestRequiredPermissions();
+      if (granted) {
+        _startGuardService();
+      }
     }
   }
 
   Future<void> _startGuardService() async {
-    bool? isGranted = await SystemAlertWindow.checkPermissions();
-    if (isGranted != true) {
-      await SystemAlertWindow.requestPermissions();
-      return;
-    }
-
     _faceDetector = FaceDetector(
-      options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.fast,
-      ),
+      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.fast),
     );
 
     if (_cameras.isEmpty) {
       _cameras = await availableCameras();
-    }
-
-    if (_cameras.isEmpty) {
-      if (mounted) setState(() => _statusText = "Không tìm thấy camera!");
-      return;
     }
 
     final frontCamera = _cameras.firstWhere(
@@ -112,21 +80,15 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       imageFormatGroup: ImageFormatGroup.nv21,
     );
 
-    try {
-      await _cameraController!.initialize();
-      await _cameraController!.startImageStream(_processCameraImage);
-      if (mounted) {
-        setState(() {
-          _isServiceRunning = true;
-          _statusText = "Bảo vệ mắt đang chạy...";
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _statusText = "Lỗi khởi tạo: $e");
-    }
+    await _cameraController!.initialize();
+    await _cameraController!.startImageStream(_processImageStream);
+
+    setState(() {
+      _isServiceRunning = true;
+    });
   }
 
-  void _processCameraImage(CameraImage image) async {
+  void _processImageStream(CameraImage image) async {
     if (_isProcessing || _faceDetector == null || _cameraController == null) return;
     _isProcessing = true;
 
@@ -150,119 +112,90 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       if (faces.isNotEmpty) {
         final face = faces.first;
         double faceWidthInPixels = face.boundingBox.width;
-        double estimatedDistance = (image.width * 18.0) / faceWidthInPixels;
+        // Công thức tính khoảng cách
+        double distance = (image.width * 18.0) / faceWidthInPixels;
 
         if (mounted) {
           setState(() {
-            _calculatedDistanceCm = estimatedDistance;
+            _calculatedDistanceCm = distance;
           });
         }
 
-        // ĐỌC KHOẢNG CÁCH: Dưới hoặc bằng 30cm => Bật che màn hình. Trên 30cm => Tắt che màn hình.
-        if (estimatedDistance <= 30.0) {
-          _showOverlay();
+        // ĐIỀU KIỆN BẬT / TẮT MÀN HÌNH CHE
+        if (distance <= 30.0) {
+          _showOverlayWindow(); // Bật màn che khi < 30cm
         } else {
-          _hideOverlay();
-        }
-      } else {
-        // Trường hợp mặt quá gần sát camera làm tràn viền quét
-        if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
-          _showOverlay();
+          _hideOverlayWindow(); // Tắt màn che khi > 30cm
         }
       }
     } catch (e) {
-      debugPrint("Lỗi nhận diện: $e");
+      debugPrint("Lỗi xử lý ảnh: $e");
     } finally {
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 150));
       _isProcessing = false;
     }
   }
 
-  void _showOverlay() async {
+  void _showOverlayWindow() async {
     if (_isOverlayShowing) return;
     _isOverlayShowing = true;
 
     await SystemAlertWindow.showSystemWindow(
-      height: 2500,
-      width: 1500,
+      height: 2000,
+      width: 1200,
       gravity: SystemWindowGravity.CENTER,
       prefMode: SystemWindowPrefMode.OVERLAY,
-      notificationTitle: "CẢNH BÁO KHOẢNG CÁCH MẮT!",
-      notificationBody: "Bạn đang ở quá gần màn hình (< 30cm). Hãy đưa điện thoại ra xa!",
+      notificationTitle: "CẢNH BÁO QUÁ GẦN!",
+      notificationBody: "Khoảng cách mắt < 30cm. Vui lòng đưa điện thoại ra xa!",
     );
   }
 
-  void _hideOverlay() async {
+  void _hideOverlayWindow() async {
     if (!_isOverlayShowing) return;
     _isOverlayShowing = false;
     await SystemAlertWindow.closeSystemWindow(prefMode: SystemWindowPrefMode.OVERLAY);
   }
 
-  void _stopService() async {
+  void _stopGuardService() async {
     await _cameraController?.stopImageStream();
     await _cameraController?.dispose();
     await _faceDetector?.close();
-    _hideOverlay();
-    if (mounted) {
-      setState(() {
-        _isServiceRunning = false;
-        _statusText = "Đã dừng dịch vụ";
-        _calculatedDistanceCm = 0.0;
-      });
-    }
+    _hideOverlayWindow();
+    setState(() {
+      _isServiceRunning = false;
+      _calculatedDistanceCm = 0.0;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Safety Screen - Bảo Vệ Mắt"),
-        backgroundColor: const Color(0xFF1B6B93),
-        centerTitle: true,
+        title: const Text("Bảo Vệ Khoảng Cách Mắt"),
+        backgroundColor: Colors.blueGrey,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              _isServiceRunning ? Icons.shield : Icons.shield_outlined,
-              size: 100,
-              color: _isServiceRunning ? const Color(0xFF1B6B93) : Colors.grey,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              _statusText,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 12),
             Text(
               "Khoảng cách: ${_calculatedDistanceCm.toStringAsFixed(1)} cm",
               style: TextStyle(
-                fontSize: 26,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
                 color: _calculatedDistanceCm <= 30 && _calculatedDistanceCm > 0 ? Colors.red : Colors.green,
               ),
             ),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isServiceRunning ? Colors.redAccent : const Color(0xFF1B6B93),
-                ),
-                onPressed: () {
-                  if (_isServiceRunning) {
-                    _stopService();
-                  } else {
-                    _startGuardService();
-                  }
-                },
-                child: Text(
-                  _isServiceRunning ? "TẮT BẢO VỆ" : "BẬT BẢO VỆ CHẠY NGẦM",
-                  style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: _toggleService,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isServiceRunning ? Colors.red : Colors.green,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              ),
+              child: Text(
+                _isServiceRunning ? "TẮT BẢO VỆ" : "BẬT BẢO VỆ (CẦN CẤP QUYỀN VẼ ĐÈ)",
+                style: const TextStyle(fontSize: 16, color: Colors.white),
               ),
             ),
           ],
