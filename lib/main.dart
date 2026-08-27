@@ -40,9 +40,9 @@ class SafetyOverlayWidget extends StatelessWidget {
               SizedBox(height: 12),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 30),
-                textAlign: TextAlign.center,
                 child: Text(
                   "Bạn đang ghé sát mắt quá gần (< 30cm).\nVui lòng đưa điện thoại ra xa để tiếp tục sử dụng.",
+                  textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.4),
                 ),
               ),
@@ -170,7 +170,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
 
       if (faces.isNotEmpty) {
         final face = faces.first;
-        // Thuật toán tính khoảng cách dựa trên tỷ lệ chiều rộng khuôn mặt thực tế
         double faceWidthInPixels = face.boundingBox.width;
         double estimatedDistance = (image.width * 18.0) / faceWidthInPixels;
 
@@ -186,7 +185,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           _hideFullOverlay();
         }
       } else {
-        // Trường hợp đưa quá sát làm khuôn mặt tràn khung hình camera
         if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
           _showFullOverlay();
         }
@@ -207,7 +205,9 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       flag: OverlayFlag.defaultFlag,
       alignment: OverlayAlignment.center,
       visibility: NotificationVisibility.visibilitySecret,
-      positionGravity: PositionGravity.full,
+      positionGravity: PositionGravity.none,
+      height: WindowSize.matchParent,
+      width: WindowSize.matchParent,
     );
   }
 
