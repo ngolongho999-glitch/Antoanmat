@@ -12,7 +12,7 @@ Future<void> main() async {
   try {
     _cameras = await availableCameras();
   } catch (e) {
-    debugPrint("Lỗi khởi tạo danh sách camera: $e");
+    debugPrint("Lỗi khởi tạo camera: $e");
   }
   runApp(const MyApp());
 }
@@ -42,7 +42,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   bool _isProcessing = false;
   bool _screenOff = false;
   double _calculatedDistanceCm = 0.0;
-  String _statusText = "Đang khởi tạo ứng dụng...";
+  String _statusText = "Đang khởi tạo...";
   DateTime _lastProcessedTime = DateTime.now();
 
   @override
@@ -52,14 +52,12 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   }
 
   Future<void> _initDetectorAndCamera() async {
-    // 1. Yêu cầu quyền truy cập Camera
     final status = await Permission.camera.request();
     if (!status.isGranted) {
-      if (mounted) setState(() => _statusText = "Vui lòng cấp quyền Camera để dùng App!");
+      if (mounted) setState(() => _statusText = "Cần cấp quyền Camera!");
       return;
     }
 
-    // 2. Khởi tạo ML Kit Face Detector
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
         enableLandmarks: true,
@@ -76,7 +74,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       return;
     }
 
-    // 3. Ưu tiên lấy Camera trước
     final frontCamera = _cameras.firstWhere(
       (cam) => cam.lensDirection == CameraLensDirection.front,
       orElse: () => _cameras.first,
@@ -93,7 +90,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       await _cameraController!.initialize();
       await _cameraController!.startImageStream(_processCameraImage);
       if (mounted) {
-        setState(() => _statusText = "Đang tìm kiếm khuôn mặt...");
+        setState(() => _statusText = "Đang quét khuôn mặt...");
       }
     } catch (e) {
       if (mounted) {
@@ -103,7 +100,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   }
 
   void _processCameraImage(CameraImage image) async {
-    // Giới hạn tần suất xử lý (chỉ xử lý 1 frame mỗi 300ms để tránh treo app)
     final now = DateTime.now();
     if (_isProcessing || now.difference(_lastProcessedTime).inMilliseconds < 300) {
       return;
@@ -114,7 +110,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     _lastProcessedTime = now;
 
     try {
-      // Gom dữ liệu byte từ CameraImage
       final BytesBuilder bytesBuilder = BytesBuilder();
       for (final Plane plane in image.planes) {
         bytesBuilder.add(plane.bytes);
@@ -124,7 +119,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
       final camera = _cameraController!.description;
       
-      // Xử lý góc xoay chuẩn theo thiết bị
       final imageRotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation) ?? InputImageRotation.rotation270deg;
       final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
 
@@ -151,15 +145,14 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           double pixelDistance = sqrt(dx * dx + dy * dy);
 
           if (pixelDistance > 0) {
-            // Công thức tính khoảng cách thực tế (cm)
-            // f (tiêu cự ước tính) ~ 450, W (khoảng cách 2 mắt trung bình) ~ 6.3 cm
             double estimatedDistance = (450 * 6.3) / pixelDistance;
 
             if (mounted) {
               setState(() {
                 _calculatedDistanceCm = estimatedDistance;
-                _statusText = "Đang phát hiện mắt thành công!";
-                _screenOff = estimatedDistance > 30.0;
+                _statusText = "Đã phát hiện khuôn mặt";
+                // LOGIC MỚI: Tắt màn hình khi QUÁ GẦN (<= 30 cm), Mở lại khi XA ( > 30 cm)
+                _screenOff = estimatedDistance <= 30.0;
               });
             }
           }
@@ -167,7 +160,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       } else {
         if (mounted) {
           setState(() {
-            _statusText = "Chưa phát hiện khuôn mặt trong khung hình";
+            _statusText = "Chưa nhận diện được mắt";
           });
         }
       }
@@ -194,7 +187,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           children: [
             Column(
               children: [
-                // Khung hiển thị Camera trực tiếp để kiểm tra luồng quay
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -206,7 +198,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
                           ),
                   ),
                 ),
-                // Thanh thông số kết quả phía dưới
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                   color: Colors.white,
@@ -227,7 +218,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.bold,
-                          color: _calculatedDistanceCm > 30 ? Colors.red : Colors.green,
+                          color: _calculatedDistanceCm <= 30 ? Colors.red : Colors.green,
                         ),
                       ),
                     ],
@@ -236,7 +227,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
               ],
             ),
 
-            // Màn hình phủ đen hoàn toàn khi khoảng cách > 30cm
+            // TẮT MÀN HÌNH KHI KHOẢNG CÁCH MẮT LE 30 CM
             if (_screenOff)
               Positioned.fill(
                 child: Container(
@@ -245,14 +236,14 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.visibility_off, size: 70, color: Colors.white54),
+                        Icon(Icons.warning_amber_rounded, size: 80, color: Colors.redAccent),
                         SizedBox(height: 16),
                         Text(
-                          "ĐÃ TẮT MÀN HÌNH\n(Khoảng cách mắt > 30cm)",
+                          "ĐÃ TẮT MÀN HÌNH!\n\nKhoảng cách quá gần (< 30cm)\nVui lòng đưa điện thoại ra xa để mở lại.",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
