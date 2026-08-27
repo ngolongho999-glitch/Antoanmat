@@ -56,7 +56,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   }
 
   Future<void> _checkPermissions() async {
-    // Kiểm tra và xin quyền vẽ lên trên ứng dụng khác
     bool? isGranted = await SystemAlertWindow.checkPermissions();
     if (isGranted != true) {
       await SystemAlertWindow.requestPermissions();
@@ -102,7 +101,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
 
     _cameraController = CameraController(
       frontCamera,
-      ResolutionPreset.medium,
+      ResolutionPreset.low, // Dùng Low để xử lý cực nhanh và không bị trễ
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
@@ -125,7 +124,8 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
 
   void _processCameraImage(CameraImage image) async {
     final now = DateTime.now();
-    if (_isProcessing || now.difference(_lastProcessedTime).inMilliseconds < 120) {
+    // Phản hồi siêu nhanh (50ms)
+    if (_isProcessing || now.difference(_lastProcessedTime).inMilliseconds < 50) {
       return;
     }
 
@@ -169,8 +169,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           double pixelDistance = sqrt(dx * dx + dy * dy);
 
           if (pixelDistance > 0) {
-            // Cân chỉnh hệ số khoảng cách thực tế chuẩn xác hơn
-            double focalLength = image.width * 0.95;
+            double focalLength = image.width * 0.7;
             double averageInterpupillaryDistance = 6.3; 
             double rawDistance = (focalLength * averageInterpupillaryDistance) / pixelDistance;
 
@@ -186,19 +185,36 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
               });
             }
 
-            // KHI KHOẢNG CÁCH DƯỚI 30 CM -> BẬT MÀN HÌNH PHỦ ĐEN CẢNH BÁO
             if (smoothedDistance <= 30.0) {
               _showBlackOverlay();
             } else {
               _hideBlackOverlay();
             }
           }
+        } else {
+          // Trường hợp đưa quá sát mắt khiến camera mất nét không thấy rõ 2 mắt
+          _handleTooCloseCase();
         }
+      } else {
+        // Trường hợp khuôn mặt quá to/quá sát làm tràn màn hình
+        _handleTooCloseCase();
       }
     } catch (e) {
       debugPrint("Lỗi nhận diện: $e");
     } finally {
       _isProcessing = false;
+    }
+  }
+
+  void _handleTooCloseCase() {
+    // Nếu trước đó đang ở khoảng cách gần (< 35cm) mà đột ngột mất khuôn mặt => Chắc chắn là do đưa sát camera
+    if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
+      if (mounted) {
+        setState(() {
+          _calculatedDistanceCm = 10.0; // Ép về 10cm
+        });
+      }
+      _showBlackOverlay();
     }
   }
 
@@ -227,10 +243,13 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     await _cameraController?.dispose();
     await _faceDetector?.close();
     _hideBlackOverlay();
-    setState(() {
-      _isServiceRunning = false;
-      _statusText = "Đã dừng dịch vụ";
-    });
+    if (mounted) {
+      setState(() {
+        _isServiceRunning = false;
+        _statusText = "Đã dừng dịch vụ";
+        _calculatedDistanceCm = 0.0;
+      });
+    }
   }
 
   @override
