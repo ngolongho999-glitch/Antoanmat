@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+// ĐÃ SỬA: Đặt alias 'overlay' để không bị trùng tên NotificationVisibility
+import 'package:flutter_overlay_window/flutter_overlay_window.dart' as overlay;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 List<CameraDescription> _cameras = [];
@@ -83,9 +84,9 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
       await Permission.camera.request();
       await Permission.notification.request();
 
-      bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
+      bool isGranted = await overlay.FlutterOverlayWindow.isPermissionGranted();
       if (!isGranted) {
-        await FlutterOverlayWindow.requestPermission();
+        await overlay.FlutterOverlayWindow.requestPermission();
         return;
       }
 
@@ -94,7 +95,6 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
   }
 
   Future<void> _startGuardService() async {
-    // Khởi chạy thông báo chạy ngầm bắt buộc để giữ Camera hoạt động ngoài app
     await FlutterForegroundTask.startService(
       notificationTitle: 'Bảo Vệ Mắt Đang Bật',
       notificationText: 'Sẽ tự động tối màn hình khi xem quá gần',
@@ -164,18 +164,18 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
         // KHOẢNG CÁCH <= 30CM: TỐI MÀN HÌNH (DÙ ĐANG Ở YOUTUBE HAY BẤT KỲ APP NÀO)
         if (distance <= 30.0 && !_isOverlayShowing) {
           _isOverlayShowing = true;
-          await FlutterOverlayWindow.showOverlay(
+          await overlay.FlutterOverlayWindow.showOverlay(
             enableDrag: false,
-            flag: OverlayFlag.defaultFlag,
-            alignment: OverlayAlignment.center,
-            visibility: NotificationVisibility.visibilitySecret,
-            positionGravity: PositionGravity.none,
+            flag: overlay.OverlayFlag.defaultFlag,
+            alignment: overlay.OverlayAlignment.center,
+            visibility: overlay.NotificationVisibility.visibilitySecret,
+            positionGravity: overlay.PositionGravity.none,
           );
         } 
         // KHOẢNG CÁCH > 30CM: MÀN HÌNH SÁNG LẠI Y CŨ
         else if (distance > 30.0 && _isOverlayShowing) {
           _isOverlayShowing = false;
-          await FlutterOverlayWindow.closeOverlay();
+          await overlay.FlutterOverlayWindow.closeOverlay();
         }
       }
     } catch (e) {
@@ -193,7 +193,7 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
     await _faceDetector?.close();
     if (_isOverlayShowing) {
       _isOverlayShowing = false;
-      await FlutterOverlayWindow.closeOverlay();
+      await overlay.FlutterOverlayWindow.closeOverlay();
     }
     setState(() {
       _isServiceRunning = false;
@@ -221,7 +221,7 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
                   color: _calculatedDistanceCm <= 30 && _calculatedDistanceCm > 0 ? Colors.red : Colors.green,
                 ),
               ),
-              const SizedBox(height: 30),
+            const SizedBox(height: 30),
               ElevatedButton(
                 onPressed: _toggleService,
                 style: ElevatedButton.styleFrom(
