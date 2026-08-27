@@ -7,7 +7,7 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 List<CameraDescription> _cameras = [];
 
-// MÀN HÌNH CHE CẢNH BÁO MÀU ĐỎ KHI KHOẢNG CÁCH < 30CM
+// ĐÂY LÀ GIAO DIỆN MÀN HÌNH BẢO VỆ MẮT CHE TOÀN BỘ KHI NGUY HIỂM
 @pragma("vm:entry-point")
 void overlayMain() {
   runApp(
@@ -38,7 +38,7 @@ void overlayMain() {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 20,
                   ),
                 ),
               ],
@@ -55,7 +55,7 @@ Future<void> main() async {
   try {
     _cameras = await availableCameras();
   } catch (e) {
-    debugPrint("Lỗi camera: $e");
+    debugPrint("Lỗi khởi tạo camera: $e");
   }
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -75,6 +75,7 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
   FaceDetector? _faceDetector;
   bool _isProcessing = false;
   bool _isServiceRunning = false;
+  bool _isOverlayShowing = false;
   double _calculatedDistanceCm = 0.0;
 
   Future<void> _toggleService() async {
@@ -156,37 +157,26 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
           });
         }
 
-        if (distance <= 30.0) {
-          _showOverlay();
-        } else {
-          _hideOverlay();
+        // TỰ ĐỘNG BẬT CHE KHI KHOẢNG CÁCH <= 30CM
+        if (distance <= 30.0 && !_isOverlayShowing) {
+          _isOverlayShowing = true;
+          await FlutterOverlayWindow.showOverlay(
+            enableDrag: false,
+            flag: OverlayFlag.defaultFlag,
+            alignment: OverlayAlignment.center,
+            visibility: NotificationVisibility.visibilitySecret,
+            positionGravity: PositionGravity.none,
+          );
+        } else if (distance > 30.0 && _isOverlayShowing) {
+          _isOverlayShowing = false;
+          await FlutterOverlayWindow.closeOverlay();
         }
       }
     } catch (e) {
-      debugPrint("Lỗi xử lý: $e");
+      debugPrint("Lỗi đo khoảng cách: $e");
     } finally {
       await Future.delayed(const Duration(milliseconds: 150));
       _isProcessing = false;
-    }
-  }
-
-  void _showOverlay() async {
-    bool isActive = await FlutterOverlayWindow.isActive();
-    if (!isActive) {
-      await FlutterOverlayWindow.showOverlay(
-        enableDrag: false,
-        flag: OverlayFlag.defaultFlag,
-        alignment: OverlayAlignment.center,
-        visibility: NotificationVisibility.visibilitySecret,
-        positionGravity: PositionGravity.none,
-      );
-    }
-  }
-
-  void _hideOverlay() async {
-    bool isActive = await FlutterOverlayWindow.isActive();
-    if (isActive) {
-      await FlutterOverlayWindow.closeOverlay();
     }
   }
 
@@ -194,7 +184,10 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
     await _cameraController?.stopImageStream();
     await _cameraController?.dispose();
     await _faceDetector?.close();
-    _hideOverlay();
+    if (_isOverlayShowing) {
+      _isOverlayShowing = false;
+      await FlutterOverlayWindow.closeOverlay();
+    }
     setState(() {
       _isServiceRunning = false;
       _calculatedDistanceCm = 0.0;
