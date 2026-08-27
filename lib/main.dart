@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Chuyển hướng sang màn hình đo khoảng cách camera
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DistanceMonitorPage()),
+                      MaterialPageRoute(builder: (context) => DistanceMonitorPage()),
                     );
                   });
                 }
