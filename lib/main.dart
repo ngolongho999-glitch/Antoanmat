@@ -56,9 +56,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   }
 
   Future<void> _requestPermissions() async {
-    // 1. Xin quyền Camera
     await Permission.camera.request();
-    // 2. Xin quyền Hiển thị trên ứng dụng khác (Draw over other apps)
     await SystemAlertWindow.requestPermissions();
   }
 
@@ -174,7 +172,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
               });
             }
 
-            // XỬ LÝ CHẠY NGẦM VÀ PHỦ ĐEN MÀN HÌNH KHI DÙNG ỨNG DỤNG KHÁC
             if (smoothedDistance <= 30.0) {
               _showBlackOverlay();
             } else {
@@ -194,27 +191,13 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     if (_isOverlayShowing) return;
     _isOverlayShowing = true;
 
-    SystemWindowHeader header = SystemWindowHeader(
-      title: SystemWindowText(
-        text: "ĐÃ TẮT MÀN HÌNH!",
-        fontSize: 20,
-        textColor: Colors.white,
-        fontWeight: FontWeight.BOLD,
-      ),
-      subTitle: SystemWindowText(
-        text: "Khoảng cách quá gần (< 30cm). Đưa điện thoại ra xa để mở lại.",
-        fontSize: 14,
-        textColor: Colors.redAccent,
-      ),
-      backgroundColor: Colors.black,
-    );
-
     await SystemAlertWindow.showSystemWindow(
       height: 2000,
-      header: header,
-      margin: SystemWindowMargin(left: 0, right: 0, top: 0, bottom: 0),
-      gravity: SystemWindowGravity.TOP,
+      width: 1000,
+      gravity: SystemWindowGravity.CENTER,
       prefMode: SystemWindowPrefMode.OVERLAY,
+      notificationTitle: "ĐÃ TẮT MÀN HÌNH!",
+      notificationBody: "Khoảng cách quá gần (< 30cm). Đưa điện thoại ra xa để mở lại.",
     );
   }
 
@@ -297,7 +280,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
             ),
             const SizedBox(height: 20),
             const Text(
-              "Lưu ý: Sau khi bấm BẬT, bạn có thể thoát ra màn hình chính, mở Facebook, YouTube hay chơi game. Nếu đưa mắt gần hơn 30cm, màn hình phủ đen cảnh báo sẽ ngay lập tức hiện đè lên mọi ứng dụng.",
+              "Lưu ý: Sau khi bấm BẬT, bạn có thể thoát ra màn hình chính để dùng Facebook, YouTube... Khi mắt lại gần dưới 30cm, lớp màn hình đè sẽ xuất hiện lập tức.",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
