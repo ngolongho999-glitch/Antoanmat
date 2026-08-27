@@ -1,65 +1,19 @@
-import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:system_alert_window/system_alert_window.dart';
 
 List<CameraDescription> _cameras = [];
-
-@pragma("vm:entry-point")
-void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SafetyOverlayWidget(),
-    ),
-  );
-}
-
-// Giao diện che toàn màn hình giống Samsung Safety Screen
-class SafetyOverlayWidget extends StatelessWidget {
-  const SafetyOverlayWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF1B6B93),
-      child: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.face_retouching_natural, size: 120, color: Colors.white),
-              SizedBox(height: 24),
-              Text(
-                "ĐÃ KHOÁ MÀN HÌNH!",
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              SizedBox(height: 12),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 30),
-                child: Text(
-                  "Bạn đang ghé sát mắt quá gần (< 30cm).\nVui lòng đưa điện thoại ra xa để tiếp tục sử dụng.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.4),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     _cameras = await availableCameras();
   } catch (e) {
-    debugPrint("Lỗi khởi tạo camera: $e");
+    debugPrint("Lỗi camera: $e");
   }
   runApp(const MyApp());
 }
@@ -95,19 +49,21 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
+    _checkPermissions();
   }
 
-  Future<void> _requestPermissions() async {
+  Future<void> _checkPermissions() async {
     await Permission.camera.request();
-    if (!await FlutterOverlayWindow.isPermissionGranted()) {
-      await FlutterOverlayWindow.requestPermission();
+    bool? isGranted = await SystemAlertWindow.checkPermissions();
+    if (isGranted != true) {
+      await SystemAlertWindow.requestPermissions();
     }
   }
 
   Future<void> _startGuardService() async {
-    if (!await FlutterOverlayWindow.isPermissionGranted()) {
-      await FlutterOverlayWindow.requestPermission();
+    bool? isGranted = await SystemAlertWindow.checkPermissions();
+    if (isGranted != true) {
+      await SystemAlertWindow.requestPermissions();
       return;
     }
 
@@ -119,6 +75,11 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
 
     if (_cameras.isEmpty) {
       _cameras = await availableCameras();
+    }
+
+    if (_cameras.isEmpty) {
+      if (mounted) setState(() => _statusText = "Không tìm thấy camera!");
+      return;
     }
 
     final frontCamera = _cameras.firstWhere(
@@ -171,6 +132,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       if (faces.isNotEmpty) {
         final face = faces.first;
         double faceWidthInPixels = face.boundingBox.width;
+        // Tính toán khoảng cách chính xác
         double estimatedDistance = (image.width * 18.0) / faceWidthInPixels;
 
         if (mounted) {
@@ -180,48 +142,50 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
         }
 
         if (estimatedDistance <= 30.0) {
-          _showFullOverlay();
+          _showOverlay();
         } else {
-          _hideFullOverlay();
+          _hideOverlay();
         }
       } else {
+        // Nếu đưa sát camera quá làm khuôn mặt bị tràn viền không quét được
         if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
-          _showFullOverlay();
+          _showOverlay();
         }
       }
     } catch (e) {
-      debugPrint("Lỗi: $e");
+      debugPrint("Lỗi nhận diện: $e");
     } finally {
       await Future.delayed(const Duration(milliseconds: 100));
       _isProcessing = false;
     }
   }
 
-  void _showFullOverlay() async {
+  void _showOverlay() async {
     if (_isOverlayShowing) return;
     _isOverlayShowing = true;
-    await FlutterOverlayWindow.showOverlay(
-      enableDrag: false,
-      flag: OverlayFlag.defaultFlag,
-      alignment: OverlayAlignment.center,
-      visibility: NotificationVisibility.visibilitySecret,
-      positionGravity: PositionGravity.none,
-      height: WindowSize.matchParent,
-      width: WindowSize.matchParent,
+
+    // Hiển thị khung màn hình che phủ màu xanh giống Samsung Safety Screen
+    await SystemAlertWindow.showSystemWindow(
+      height: 2500,
+      width: 1500,
+      gravity: SystemWindowGravity.CENTER,
+      prefMode: SystemWindowPrefMode.OVERLAY,
+      notificationTitle: "CẢNH BÁO KHOẢNG CÁCH MẮT!",
+      notificationBody: "Bạn đang ở quá gần màn hình (< 30cm). Hãy đưa điện thoại ra xa!",
     );
   }
 
-  void _hideFullOverlay() async {
+  void _hideOverlay() async {
     if (!_isOverlayShowing) return;
     _isOverlayShowing = false;
-    await FlutterOverlayWindow.closeOverlay();
+    await SystemAlertWindow.closeSystemWindow(prefMode: SystemWindowPrefMode.OVERLAY);
   }
 
   void _stopService() async {
     await _cameraController?.stopImageStream();
     await _cameraController?.dispose();
     await _faceDetector?.close();
-    _hideFullOverlay();
+    _hideOverlay();
     if (mounted) {
       setState(() {
         _isServiceRunning = false;
