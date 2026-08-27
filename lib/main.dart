@@ -8,6 +8,24 @@ import 'package:system_alert_window/system_alert_window.dart';
 
 List<CameraDescription> _cameras = [];
 
+// Entry point bắt buộc cho overlay chạy ngầm
+@pragma("vm:entry-point")
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: Material(
+      color: Colors.transparent,
+      child: Center(
+        child: Text(
+          "CẢNH BÁO: KHOẢNG CÁCH QUÁ GẦN (< 30CM)!",
+          style: TextStyle(color: Colors.red, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+      ),
+    ),
+  ));
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -100,7 +118,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       if (mounted) {
         setState(() {
           _isServiceRunning = true;
-          _statusText = "Bảo vệ mắt đang chạy ngầm...";
+          _statusText = "Bảo vệ mắt đang chạy...";
         });
       }
     } catch (e) {
@@ -140,12 +158,14 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           });
         }
 
+        // ĐỌC KHOẢNG CÁCH: Dưới hoặc bằng 30cm => Bật che màn hình. Trên 30cm => Tắt che màn hình.
         if (estimatedDistance <= 30.0) {
           _showOverlay();
         } else {
           _hideOverlay();
         }
       } else {
+        // Trường hợp mặt quá gần sát camera làm tràn viền quét
         if (_calculatedDistanceCm > 0 && _calculatedDistanceCm <= 35.0) {
           _showOverlay();
         }
