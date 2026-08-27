@@ -44,7 +44,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   bool _isOverlayShowing = false;
   bool _isServiceRunning = false;
   double _calculatedDistanceCm = 0.0;
-  String _statusText = "Sẵn sàng khởi chạy ngầm";
+  String _statusText = "Sẵn sàng khởi chạy";
   DateTime _lastProcessedTime = DateTime.now();
 
   final List<double> _distanceHistory = [];
@@ -52,15 +52,28 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
+    _checkPermissions();
   }
 
-  Future<void> _requestPermissions() async {
+  Future<void> _checkPermissions() async {
+    // Kiểm tra và xin quyền vẽ lên trên ứng dụng khác
+    bool? isGranted = await SystemAlertWindow.checkPermissions();
+    if (isGranted != true) {
+      await SystemAlertWindow.requestPermissions();
+    }
     await Permission.camera.request();
-    await SystemAlertWindow.requestPermissions();
   }
 
   Future<void> _startGuardService() async {
+    bool? isGranted = await SystemAlertWindow.checkPermissions();
+    if (isGranted != true) {
+      if (mounted) {
+        setState(() => _statusText = "CHƯA CẤP QUYỀN VẼ TRÊN ỨNG DỤNG KHÁC!");
+      }
+      await SystemAlertWindow.requestPermissions();
+      return;
+    }
+
     final camStatus = await Permission.camera.status;
     if (!camStatus.isGranted) {
       await Permission.camera.request();
@@ -100,19 +113,19 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       if (mounted) {
         setState(() {
           _isServiceRunning = true;
-          _statusText = "Bảo vệ mắt đang chạy ngầm...";
+          _statusText = "Bảo vệ mắt đang hoạt động...";
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _statusText = "Lỗi khởi tạo: $e");
+        setState(() => _statusText = "Lỗi khởi tạo camera: $e");
       }
     }
   }
 
   void _processCameraImage(CameraImage image) async {
     final now = DateTime.now();
-    if (_isProcessing || now.difference(_lastProcessedTime).inMilliseconds < 150) {
+    if (_isProcessing || now.difference(_lastProcessedTime).inMilliseconds < 120) {
       return;
     }
 
@@ -156,12 +169,13 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           double pixelDistance = sqrt(dx * dx + dy * dy);
 
           if (pixelDistance > 0) {
-            double focalLength = image.width * 0.8;
-            double averageInterpupillaryDistance = 6.3;
+            // Cân chỉnh hệ số khoảng cách thực tế chuẩn xác hơn
+            double focalLength = image.width * 0.95;
+            double averageInterpupillaryDistance = 6.3; 
             double rawDistance = (focalLength * averageInterpupillaryDistance) / pixelDistance;
 
             _distanceHistory.add(rawDistance);
-            if (_distanceHistory.length > 4) {
+            if (_distanceHistory.length > 3) {
               _distanceHistory.removeAt(0);
             }
             double smoothedDistance = _distanceHistory.reduce((a, b) => a + b) / _distanceHistory.length;
@@ -172,6 +186,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
               });
             }
 
+            // KHI KHOẢNG CÁCH DƯỚI 30 CM -> BẬT MÀN HÌNH PHỦ ĐEN CẢNH BÁO
             if (smoothedDistance <= 30.0) {
               _showBlackOverlay();
             } else {
@@ -196,8 +211,8 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       width: 1000,
       gravity: SystemWindowGravity.CENTER,
       prefMode: SystemWindowPrefMode.OVERLAY,
-      notificationTitle: "ĐÃ TẮT MÀN HÌNH!",
-      notificationBody: "Khoảng cách quá gần (< 30cm). Đưa điện thoại ra xa để mở lại.",
+      notificationTitle: "CẢNH BÁO KHOẢNG CÁCH MẮT!",
+      notificationBody: "Bạn đang để mắt quá gần màn hình (< 30cm). Hãy đưa điện thoại ra xa!",
     );
   }
 
@@ -252,7 +267,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
             Text(
               "Khoảng cách hiện tại: ${_calculatedDistanceCm.toStringAsFixed(1)} cm",
               style: TextStyle(
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: _calculatedDistanceCm <= 30 && _calculatedDistanceCm > 0 ? Colors.red : Colors.green,
               ),
@@ -278,11 +293,12 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              "Lưu ý: Sau khi bấm BẬT, bạn có thể thoát ra màn hình chính để dùng Facebook, YouTube... Khi mắt lại gần dưới 30cm, lớp màn hình đè sẽ xuất hiện lập tức.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            const SizedBox(height: 15),
+            OutlinedButton(
+              onPressed: () async {
+                await SystemAlertWindow.requestPermissions();
+              },
+              child: const Text("CẤP QUYỀN HỆ THỐNG (VẼ LÊN ỨNG DỤNG KHÁC)"),
             ),
           ],
         ),
