@@ -1,5 +1,5 @@
 name: eye_distance_app
-description: "Ung dung do khoang cach mat"
+description: "Ung dung do khoang cach mat chay ngam"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -13,6 +13,7 @@ dependencies:
   google_mlkit_face_detection: ^0.11.0
   permission_handler: ^11.3.1
   flutter_overlay_window: ^0.4.5
+  flutter_foreground_task: ^6.1.0
 
 dev_dependencies:
   flutter_test:
