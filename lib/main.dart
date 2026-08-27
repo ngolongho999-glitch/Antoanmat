@@ -7,44 +7,15 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 List<CameraDescription> _cameras = [];
 
-// ĐÂY LÀ GIAO DIỆN MÀN HÌNH BẢO VỆ MẮT CHE TOÀN BỘ KHI NGUY HIỂM
+// MÀN HÌNH TỐI HOÀN TOÀN KHI KHOẢNG CÁCH GẦN MẮT (< 30CM)
 @pragma("vm:entry-point")
 void overlayMain() {
   runApp(
     const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Material(
-        color: Colors.red,
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.white, size: 100),
-                SizedBox(height: 20),
-                Text(
-                  "CẢNH BÁO KHOẢNG CÁCH!",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  "Bạn đang ở quá gần màn hình (< 30cm).\nVui lòng đưa điện thoại ra xa!",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      home: Scaffold(
+        backgroundColor: Colors.black, // Tối màn hình hoàn toàn
+        body: SizedBox.expand(),
       ),
     ),
   );
@@ -55,7 +26,7 @@ Future<void> main() async {
   try {
     _cameras = await availableCameras();
   } catch (e) {
-    debugPrint("Lỗi khởi tạo camera: $e");
+    debugPrint("Lỗi camera: $e");
   }
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -157,7 +128,7 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
           });
         }
 
-        // TỰ ĐỘNG BẬT CHE KHI KHOẢNG CÁCH <= 30CM
+        // ĐƯA LẠI GẦN <= 30CM: CHE TỐI MÀN HÌNH
         if (distance <= 30.0 && !_isOverlayShowing) {
           _isOverlayShowing = true;
           await FlutterOverlayWindow.showOverlay(
@@ -167,13 +138,15 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
             visibility: NotificationVisibility.visibilitySecret,
             positionGravity: PositionGravity.none,
           );
-        } else if (distance > 30.0 && _isOverlayShowing) {
+        } 
+        // ĐƯA RA XA > 30CM: SÁNG MÀN HÌNH LẠI Y CŨ
+        else if (distance > 30.0 && _isOverlayShowing) {
           _isOverlayShowing = false;
           await FlutterOverlayWindow.closeOverlay();
         }
       }
     } catch (e) {
-      debugPrint("Lỗi đo khoảng cách: $e");
+      debugPrint("Lỗi đo: $e");
     } finally {
       await Future.delayed(const Duration(milliseconds: 150));
       _isProcessing = false;
