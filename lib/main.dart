@@ -1,6 +1,5 @@
 import 'dart:math';
-import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -59,6 +58,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     // Chọn Camera trước (Front Camera)
     final frontCamera = _cameras.firstWhere(
       (cam) => cam.lensDirection == CameraLensDirection.front,
+      orElse: () => _cameras.first,
     );
 
     _cameraController = CameraController(
@@ -77,15 +77,23 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     _isBusy = true;
 
     try {
-      final ui.WriteBuffer allBytes = ui.WriteBuffer();
+      // Dùng BytesBuilder thay thế hoàn toàn cho WriteBuffer
+      final BytesBuilder allBytes = BytesBuilder();
       for (final Plane plane in image.planes) {
-        allBytes.putUint8List(plane.bytes);
+        allBytes.add(plane.bytes);
       }
-      final bytes = allBytes.done().buffer.asUint8List();
+      final bytes = allBytes.toBytes();
 
       final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      final InputImageRotation imageRotation = InputImageRotation.rotation270deg;
-      final InputImageFormat inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
+      final InputImageRotation imageRotation = InputImageRotationValue.fromRawValue(
+            _cameras.first.sensorOrientation,
+          ) ??
+          InputImageRotation.rotation270deg;
+
+      final InputImageFormat inputImageFormat = InputImageFormatValue.fromRawValue(
+            image.format.raw,
+          ) ??
+          InputImageFormat.nv21;
 
       final inputImage = InputImage.fromBytes(
         bytes: bytes,
@@ -114,11 +122,13 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
           // f: Tiêu cự giả định (~500), W: Khoảng cách giữa 2 mắt trung bình (6.3 cm)
           double estimatedDistance = (500 * 6.3) / pixelDistance;
 
-          setState(() {
-            _calculatedDistanceCm = estimatedDistance;
-            // Tắt màn hình khi xa hơn 30cm, Bật khi <= 30cm
-            _screenOff = estimatedDistance > 30.0;
-          });
+          if (mounted) {
+            setState(() {
+              _calculatedDistanceCm = estimatedDistance;
+              // Tắt màn hình khi xa hơn 30cm, Bật khi <= 30cm
+              _screenOff = estimatedDistance > 30.0;
+            });
+          }
         }
       }
     } catch (e) {
