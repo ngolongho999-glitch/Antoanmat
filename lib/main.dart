@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
-// ĐÃ SỬA: Đặt alias 'overlay' để không bị trùng tên NotificationVisibility
-import 'package:flutter_overlay_window/flutter_overlay_window.dart' as overlay;
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 List<CameraDescription> _cameras = [];
 
-// MÀN HÌNH TỐI ĐEN CHE TOÀN MÀN HÌNH KHI KHOẢNG CÁCH < 30CM
+// MÀN HÌNH TỐI HOÀN TOÀN KHI GẦN MẮT LE 30CM
 @pragma("vm:entry-point")
 void overlayMain() {
   runApp(
@@ -51,32 +49,6 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
   bool _isOverlayShowing = false;
   double _calculatedDistanceCm = 0.0;
 
-  @override
-  void initState() {
-    super.initState();
-    _initForegroundTask();
-  }
-
-  void _initForegroundTask() {
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'eye_guard_channel',
-        channelName: 'Bảo Vệ Khoảng Cách Mắt',
-        channelDescription: 'Đang chạy ngầm để giám sát khoảng cách mắt',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 5000,
-        isOnceEvent: false,
-        autoRunOnBoot: false,
-        allowWakeLock: true,
-        allowWifiLock: false,
-      ),
-    );
-  }
-
   Future<void> _toggleService() async {
     if (_isServiceRunning) {
       _stopGuardService();
@@ -84,9 +56,9 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
       await Permission.camera.request();
       await Permission.notification.request();
 
-      bool isGranted = await overlay.FlutterOverlayWindow.isPermissionGranted();
+      bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
       if (!isGranted) {
-        await overlay.FlutterOverlayWindow.requestPermission();
+        await FlutterOverlayWindow.requestPermission();
         return;
       }
 
@@ -95,11 +67,6 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
   }
 
   Future<void> _startGuardService() async {
-    await FlutterForegroundTask.startService(
-      notificationTitle: 'Bảo Vệ Mắt Đang Bật',
-      notificationText: 'Sẽ tự động tối màn hình khi xem quá gần',
-    );
-
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(performanceMode: FaceDetectorMode.fast),
     );
@@ -161,21 +128,19 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
           });
         }
 
-        // KHOẢNG CÁCH <= 30CM: TỐI MÀN HÌNH (DÙ ĐANG Ở YOUTUBE HAY BẤT KỲ APP NÀO)
+        // DUY TRÌ BẬT/TẮT MÀN HÌNH TỐI KHI NGUY HIỂM
         if (distance <= 30.0 && !_isOverlayShowing) {
           _isOverlayShowing = true;
-          await overlay.FlutterOverlayWindow.showOverlay(
+          await FlutterOverlayWindow.showOverlay(
             enableDrag: false,
-            flag: overlay.OverlayFlag.defaultFlag,
-            alignment: overlay.OverlayAlignment.center,
-            visibility: overlay.NotificationVisibility.visibilitySecret,
-            positionGravity: overlay.PositionGravity.none,
+            flag: OverlayFlag.defaultFlag,
+            alignment: OverlayAlignment.center,
+            visibility: NotificationVisibility.visibilitySecret,
+            positionGravity: PositionGravity.none,
           );
-        } 
-        // KHOẢNG CÁCH > 30CM: MÀN HÌNH SÁNG LẠI Y CŨ
-        else if (distance > 30.0 && _isOverlayShowing) {
+        } else if (distance > 30.0 && _isOverlayShowing) {
           _isOverlayShowing = false;
-          await overlay.FlutterOverlayWindow.closeOverlay();
+          await FlutterOverlayWindow.closeOverlay();
         }
       }
     } catch (e) {
@@ -187,13 +152,12 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
   }
 
   void _stopGuardService() async {
-    await FlutterForegroundTask.stopService();
     await _cameraController?.stopImageStream();
     await _cameraController?.dispose();
     await _faceDetector?.close();
     if (_isOverlayShowing) {
       _isOverlayShowing = false;
-      await overlay.FlutterOverlayWindow.closeOverlay();
+      await FlutterOverlayWindow.closeOverlay();
     }
     setState(() {
       _isServiceRunning = false;
@@ -203,38 +167,36 @@ class _DistanceGuardAppState extends State<DistanceGuardApp> {
 
   @override
   Widget build(BuildContext context) {
-    return WithForegroundTask(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Bảo Vệ Khoảng Cách Mắt"),
-          backgroundColor: Colors.blueGrey,
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                "Khoảng cách: ${_calculatedDistanceCm.toStringAsFixed(1)} cm",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: _calculatedDistanceCm <= 30 && _calculatedDistanceCm > 0 ? Colors.red : Colors.green,
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Bảo Vệ Khoảng Cách Mắt"),
+        backgroundColor: Colors.blueGrey,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Khoảng cách: ${_calculatedDistanceCm.toStringAsFixed(1)} cm",
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: _calculatedDistanceCm <= 30 && _calculatedDistanceCm > 0 ? Colors.red : Colors.green,
               ),
+            ),
             const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _toggleService,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isServiceRunning ? Colors.red : Colors.green,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
-                child: Text(
-                  _isServiceRunning ? "TẮT BẢO VỆ" : "BẬT BẢO VỆ",
-                  style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+            ElevatedButton(
+              onPressed: _toggleService,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isServiceRunning ? Colors.red : Colors.green,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-            ],
-          ),
+              child: Text(
+                _isServiceRunning ? "TẮT BẢO VỆ" : "BẬT BẢO VỆ",
+                style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
         ),
       ),
     );
