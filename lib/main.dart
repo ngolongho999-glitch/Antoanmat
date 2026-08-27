@@ -38,6 +38,7 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
   bool _isBusy = false;
   bool _screenOff = false;
   double _calculatedDistanceCm = 0.0;
+  CameraDescription? _frontCamera;
 
   @override
   void initState() {
@@ -55,15 +56,16 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       ),
     );
 
-    // Chọn Camera trước (Front Camera)
-    final frontCamera = _cameras.firstWhere(
+    if (_cameras.isEmpty) return;
+
+    _frontCamera = _cameras.firstWhere(
       (cam) => cam.lensDirection == CameraLensDirection.front,
       orElse: () => _cameras.first,
     );
 
     _cameraController = CameraController(
-      frontCamera,
-      ResolutionPreset.low,
+      _frontCamera!,
+      ResolutionPreset.medium,
       enableAudio: false,
     );
 
@@ -72,12 +74,24 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
     if (mounted) setState(() {});
   }
 
+  InputImageRotation _rotationIntToImageRotation(int rotation) {
+    switch (rotation) {
+      case 90:
+        return InputImageRotation.rotation90deg;
+      case 180:
+        return InputImageRotation.rotation180deg;
+      case 270:
+        return InputImageRotation.rotation270deg;
+      default:
+        return InputImageRotation.rotation0deg;
+    }
+  }
+
   void _processCameraImage(CameraImage image) async {
-    if (_isBusy) return;
+    if (_isBusy || _frontCamera == null) return;
     _isBusy = true;
 
     try {
-      // Dùng BytesBuilder thay thế hoàn toàn cho WriteBuffer
       final BytesBuilder allBytes = BytesBuilder();
       for (final Plane plane in image.planes) {
         allBytes.add(plane.bytes);
@@ -85,15 +99,8 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       final bytes = allBytes.toBytes();
 
       final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      final InputImageRotation imageRotation = InputImageRotationValue.fromRawValue(
-            _cameras.first.sensorOrientation,
-          ) ??
-          InputImageRotation.rotation270deg;
-
-      final InputImageFormat inputImageFormat = InputImageFormatValue.fromRawValue(
-            image.format.raw,
-          ) ??
-          InputImageFormat.nv21;
+      final InputImageRotation imageRotation = _rotationIntToImageRotation(_frontCamera!.sensorOrientation);
+      final InputImageFormat inputImageFormat = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
 
       final inputImage = InputImage.fromBytes(
         bytes: bytes,
@@ -113,19 +120,16 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
         final rightEye = face.landmarks[FaceLandmarkType.rightEye]?.position;
 
         if (leftEye != null && rightEye != null) {
-          // Tính khoảng cách pixel giữa 2 mắt trên ảnh
           double pixelDistance = sqrt(
             pow(leftEye.x - rightEye.x, 2) + pow(leftEye.y - rightEye.y, 2),
           );
 
-          // Công thức ước tính khoảng cách thực tế (D = (f * W) / P)
-          // f: Tiêu cự giả định (~500), W: Khoảng cách giữa 2 mắt trung bình (6.3 cm)
-          double estimatedDistance = (500 * 6.3) / pixelDistance;
+          // Công thức ước tính khoảng cách
+          double estimatedDistance = (450 * 6.3) / pixelDistance;
 
           if (mounted) {
             setState(() {
               _calculatedDistanceCm = estimatedDistance;
-              // Tắt màn hình khi xa hơn 30cm, Bật khi <= 30cm
               _screenOff = estimatedDistance > 30.0;
             });
           }
@@ -151,7 +155,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // Giao diện chính của ứng dụng
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -174,8 +177,6 @@ class _DistanceScreenGuardState extends State<DistanceScreenGuard> {
               ],
             ),
           ),
-
-          // Lớp màn hình đen giả lập TẮT màn hình khi khoảng cách > 30cm
           if (_screenOff)
             Container(
               color: Colors.black,
