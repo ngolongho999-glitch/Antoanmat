@@ -1,0 +1,21 @@
+workflows:
+  android-debug:
+    name: An toàn mắt - Android Debug
+    instance_type: mac_mini_m2
+
+    environment:
+      android_signing:
+        - debug_keystore
+
+    scripts:
+      - name: Build APK
+        script: |
+          gradle assembleDebug
+
+    artifacts:
+      - app/build/outputs/apk/debug/app-debug.apk
+
+    publishing:
+      email:
+        recipients:
+          - ngolongho999@gmail.com
