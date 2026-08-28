@@ -1,15 +1,14 @@
 workflows:
-  android-native-workflow:
-    name: Build Android Native APK
+  android-workflow:
+    name: Build Android APK
     instance_type: mac_mini_m1
     max_build_duration: 30
     scripts:
-      - name: Set Android SDK location
+      - name: Get Flutter packages
         script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-      - name: Build Android APK
+          flutter pub get
+      - name: Build APK Release
         script: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          flutter build apk --release
     artifacts:
-      - app/build/outputs/apk/**/*.apk
+      - build/app/outputs/flutter-apk/*.apk
