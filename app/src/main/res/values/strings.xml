@@ -1,7 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
-
 <resources>
-
-    <string name="app_name">An toàn mắt</string>
-
+    <string name="app_name">An Toàn Mắt</string>
+    <string name="start_filter">Bật chế độ bảo vệ mắt</string>
+    <string name="stop_filter">Tắt lớp lọc</string>
+    <string name="permission_required">Bạn cần cấp quyền hiển thị trên ứng dụng khác để sử dụng tính năng này.</string>
 </resources>
