@@ -13,8 +13,7 @@ dependencies:
   google_mlkit_face_detection: ^0.11.0
   system_alert_window: ^0.7.0
   shared_preferences: ^2.2.2
+  permission_handler: ^11.3.1
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/cartoon.png
