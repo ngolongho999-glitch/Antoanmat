@@ -2,19 +2,20 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Quyền sử dụng camera -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <uses-permission
-        android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Cho phép hiển thị cảnh báo nổi trên ứng dụng khác -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Foreground Service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- Foreground Service sử dụng camera -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Thông báo trên Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"
@@ -22,22 +23,22 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- Màn hình chính -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
 
-                <action
-                    android:name="android.intent.action.MAIN" />
+                <action android:name="android.intent.action.MAIN" />
 
-                <category
-                    android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
 
             </intent-filter>
 
         </activity>
 
+        <!-- Dịch vụ giám sát khoảng cách -->
         <service
             android:name=".EyeGuardService"
             android:exported="false"
