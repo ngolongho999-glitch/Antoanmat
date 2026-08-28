@@ -1,17 +1,19 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:system_alert_window/system_alert_window.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  cameras = await availableCameras();
+  try {
+    cameras = await availableCameras();
+  } catch (e) {
+    debugPrint("Loi lay danh sach camera: $e");
+  }
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: EyeProtectionApp(),
@@ -32,27 +34,35 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
   double _currentDistanceCm = 0.0;
   bool _isTooClose = false;
   bool _isProtectionActive = true;
+  bool _permissionGranted = false;
   
   String? _savedPin;
   final TextEditingController _pinController = TextEditingController();
 
-  final double _safeDistanceCm = 30.0; 
-  final double _focalLengthPx = 450.0; 
-  final double _realFaceWidthCm = 14.0; 
+  final double _safeDistanceCm = 30.0; // Khoảng cách an toàn (cm)
+  final double _focalLengthPx = 480.0;  // Tiêu cự camera selfie chuẩn
+  final double _realFaceWidthCm = 14.0; // Chiều rộng khuôn mặt trung bình (cm)
 
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
-    _checkAndSetupPin();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await _requestPermissions();
+    await _checkAndSetupPin();
     _initFaceDetector();
-    _initCamera();
-    SystemAlertWindow.registerOnClickListener(overlayCallBack);
+    if (_permissionGranted) {
+      _initCamera();
+    }
   }
 
   Future<void> _requestPermissions() async {
-    await Permission.camera.request();
-    await Permission.systemAlertWindow.request();
+    final status = await Permission.camera.request();
+    setState(() {
+      _permissionGranted = status.isGranted;
+    });
   }
 
   void _initFaceDetector() {
@@ -99,14 +109,15 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
       _cameraController!.startImageStream((CameraImage image) {
         if (_isProcessing || !_isProtectionActive) return;
         _isProcessing = true;
-        _detectFaceDistance(image);
+        _detectFaceDistance(image, frontCamera);
       });
+      if (mounted) setState(() {});
     } catch (e) {
-      debugPrint("Lỗi camera: $e");
+      debugPrint("Loi khoi tao Camera: $e");
     }
   }
 
-  void _detectFaceDistance(CameraImage image) async {
+  void _detectFaceDistance(CameraImage image, CameraDescription camera) async {
     try {
       final WriteBuffer allBytes = WriteBuffer();
       for (final Plane plane in image.planes) {
@@ -129,80 +140,38 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
       if (faces.isNotEmpty) {
         final face = faces.first;
         double faceWidthPx = face.boundingBox.width;
+
+        // Công thức tính khoảng cách thực tế từ khuôn mặt tới camera (cm)
         double calculatedCm = (_realFaceWidthCm * _focalLengthPx) / faceWidthPx;
         
-        bool currentlyTooClose = calculatedCm < _safeDistanceCm;
-
-        setState(() {
-          _currentDistanceCm = double.parse(calculatedCm.toStringAsFixed(1));
-        });
-
-        // XỬ LÝ YÊU CẦU 2 & 3: Hiển thị/Ẩn màn hình che toàn hệ thống
-        if (currentlyTooClose && !_isTooClose) {
-          _isTooClose = true;
-          _showSystemOverlay();
-        } else if (!currentlyTooClose && _isTooClose) {
-          _isTooClose = false;
-          _hideSystemOverlay();
+        if (mounted) {
+          setState(() {
+            _currentDistanceCm = double.parse(calculatedCm.toStringAsFixed(1));
+            // Yêu cầu 2 & 3: Tự động khóa khi < 30cm và tự mở lại khi >= 30cm
+            _isTooClose = _currentDistanceCm < _safeDistanceCm;
+          });
         }
       }
     } catch (e) {
-      debugPrint("Lỗi xử lý hình ảnh: $e");
+      debugPrint("Loi xu ly Face Detection: $e");
     } finally {
       _isProcessing = false;
     }
   }
 
-  // Bật cửa sổ che nổi đè lên YouTube/Game/Màn hình chính
-  void _showSystemOverlay() {
-    SystemWindowHeader header = SystemWindowHeader(
-      title: SystemWindowText(text: "BẢO VỆ MẮT ANTOANMAT", fontSize: 16, textColor: Colors.white),
-      backgroundColor: Colors.redAccent,
-    );
-
-    SystemWindowBody body = SystemWindowBody(
-      rows: [
-        EachRow(
-          columns: [
-            EachColumn(
-              text: SystemWindowText(
-                text: "Ú Ớ! BẠN ĐANG XEM QUÁ GẦN!\n\nHãy đưa điện thoại ra xa trên 30cm để tiếp tục sử dụng.",
-                fontSize: 18,
-                textColor: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ],
-      padding: SystemWindowPadding(left: 16, right: 16, bottom: 16, top: 16),
-    );
-
-    SystemAlertWindow.showSystemWindow(
-      height: 400,
-      header: header,
-      body: body,
-      margin: SystemWindowMargin(left: 20, right: 20, top: 100, bottom: 0),
-      gravity: SystemWindowGravity.CENTER,
-      prefMode: SystemWindowPrefMode.OVERLAY,
-    );
-  }
-
-  void _hideSystemOverlay() {
-    SystemAlertWindow.closeSystemWindow();
-  }
-
-  // XỬ LÝ YÊU CẦU 4: Chống tắt lén bằng mã PIN
+  // Yêu cầu 4: Chống tắt lén bằng mã PIN
   void _showUnlockDialog() {
     _pinController.clear();
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Xác nhận mật khẩu quản trị'),
+        title: const Text('Xác nhận mật khẩu phụ huynh'),
         content: TextField(
           controller: _pinController,
           obscureText: true,
           keyboardType: TextInputType.number,
+          maxLength: 4,
           decoration: const InputDecoration(
             hintText: 'Nhập mã PIN 4 số',
             border: OutlineInputBorder(),
@@ -220,15 +189,17 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
                   _isProtectionActive = false;
                   _isTooClose = false;
                 });
-                _hideSystemOverlay();
                 Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã tạm dừng bảo vệ.')),
+                );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sai mật khẩu! Không thể dừng.')),
+                  const SnackBar(content: Text('Sai mật khẩu! Không thể tắt.')),
                 );
               }
             },
-            child: const Text('Xác nhận tắt'),
+            child: const Text('Mở khóa'),
           ),
         ],
       ),
@@ -237,6 +208,7 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Màn hình khởi tạo PIN nếu chưa thiết lập
     if (_savedPin == null) {
       return Scaffold(
         body: Padding(
@@ -250,6 +222,11 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
                 'Thiết lập mật khẩu chống tắt lén',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 10),
+              const Text(
+                'Mật khẩu này ngăn không cho trẻ tự ý tắt ứng dụng bảo vệ mắt.',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 20),
               TextField(
                 controller: _pinController,
@@ -257,7 +234,7 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
                 maxLength: 4,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Tạo mã PIN quản trị (4 số)',
+                  labelText: 'Tạo mã PIN 4 số',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -268,7 +245,7 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
                     _savePin(_pinController.text);
                   }
                 },
-                child: const Text('Kích hoạt bảo vệ'),
+                child: const Text('Lưu mật khẩu & Bắt đầu'),
               )
             ],
           ),
@@ -276,53 +253,102 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Antoanmat'),
-          automaticallyImplyLeading: false,
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.visibility,
-                size: 80,
-                color: _isProtectionActive ? Colors.green : Colors.grey,
+    return PopScope(
+      canPop: false, // Ngăn bấm nút Back để thoát ứng dụng
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              title: const Text('Antoanmat - Bảo Vệ Mắt'),
+              automaticallyImplyLeading: false,
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.remove_red_eye,
+                    size: 90,
+                    color: _isProtectionActive ? Colors.blue : Colors.grey,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Ứng dụng đang theo dõi khoảng cách mắt',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Khoảng cách hiện tại: ${_currentDistanceCm} cm',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: _currentDistanceCm < _safeDistanceCm ? Colors.red : Colors.green,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      backgroundColor: _isProtectionActive ? Colors.redAccent : Colors.green,
+                    ),
+                    onPressed: () {
+                      if (_isProtectionActive) {
+                        _showUnlockDialog();
+                      } else {
+                        setState(() {
+                          _isProtectionActive = true;
+                        });
+                      }
+                    },
+                    icon: Icon(_isProtectionActive ? Icons.lock : Icons.lock_open),
+                    label: Text(
+                      _isProtectionActive ? 'Tắt bảo vệ (Cần PIN)' : 'Bật lại bảo vệ',
+                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Khoảng cách: ${_currentDistanceCm} cm',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: _currentDistanceCm < _safeDistanceCm ? Colors.red : Colors.green,
-                ),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isProtectionActive ? Colors.red : Colors.green,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-                onPressed: () {
-                  if (_isProtectionActive) {
-                    _showUnlockDialog();
-                  } else {
-                    setState(() => _isProtectionActive = true);
-                  }
-                },
-                icon: Icon(_isProtectionActive ? Icons.lock : Icons.lock_open),
-                label: Text(
-                  _isProtectionActive ? 'Tắt dịch vụ (Cần PIN)' : 'Bật lại dịch vụ',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          // Màn hình che hoạt hình ngộ nghĩnh phủ kín khi đưa mắt quá gần (<30cm)
+          if (_isTooClose && _isProtectionActive)
+            Positioned.fill(
+              child: Container(
+                color: Colors.orangeAccent,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.face_retouching_warning, size: 150, color: Colors.white),
+                    const SizedBox(height: 20),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Text(
+                        'Ú Ớ! ĐƯA ĐIỆN THOẠI RA XA NÀO!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Hãy giữ khoảng cách trên ${_safeDistanceCm.toInt()} cm\n(Hiện tại: ${_currentDistanceCm} cm)',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 18,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -334,8 +360,4 @@ class _EyeProtectionAppState extends State<EyeProtectionApp> {
     _pinController.dispose();
     super.dispose();
   }
-}
-
-void overlayCallBack(String tag) {
-  debugPrint("Overlay Callback: $tag");
 }
